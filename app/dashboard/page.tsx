@@ -93,7 +93,7 @@ export default function DashboardPage() {
         {/* Growth Chart */}
         <div className="col-span-1 md:col-span-2 lg:col-span-5 space-y-4">
           {/* Upgrade/Notification Banner */}
-          <div className="relative overflow-hidden rounded-xl bg-linear-to-r from-indigo-600 to-purple-600 p-6 text-white shadow-lg">
+          <div className="relative overflow-hidden rounded-xl bg-linear-to-r from-secondary to-primary p-6 text-white shadow-lg">
             <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div>
                 <h2 className="text-xl font-bold">تنبيهات النظام</h2>
