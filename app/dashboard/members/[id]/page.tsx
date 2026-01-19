@@ -73,11 +73,11 @@ interface Member {
 }
 
 const documentTypeLabels: Record<string, string> = {
-  national_id: "البطاقة الوطنية / الهوية",
+  national_id_front: "هوية العضو (الوجه الأمامي)",
+  national_id_back: "هوية العضو (الوجه الخلفي)",
   photo: "الصورة الشخصية",
-  residence_card: "بطاقة السكن",
-  certificate: "الشهادة / الوثيقة الدراسية",
-  other: "مستندات أخرى",
+  residence_card_front: "بطاقة السكن (الوجه الأمامي)",
+  residence_card_back: "بطاقة السكن (الوجه الخلفي)",
 };
 
 export default function MemberDetailsPage() {
@@ -131,16 +131,18 @@ export default function MemberDetailsPage() {
 
   // Helper to find profile photo if it exists in documents
   const profilePhoto = member.documents?.find(
-    (d) => d.document_type === "photo" && d.is_active
+    (d) => d.document_type === "photo" && d.is_active,
   );
 
   const R2_DOMAIN = "https://pub-78f212f5cfc14ae7baadced9bbb60ce3.r2.dev";
 
   const getFileUrl = (doc?: MemberDocument) => {
     if (!doc) return undefined;
-    if (doc.file_key) return( 
-      console.log(`${R2_DOMAIN}/${doc.file_key}`),
-      `${R2_DOMAIN}/${doc.file_key}`);
+    if (doc.file_key)
+      return (
+        console.log(`${R2_DOMAIN}/${doc.file_key}`),
+        `${R2_DOMAIN}/${doc.file_key}`
+      );
     return doc.file_url;
   };
 

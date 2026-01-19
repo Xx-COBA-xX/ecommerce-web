@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useRouter, useParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
@@ -14,7 +14,6 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -35,29 +34,27 @@ import {
   Upload,
   FileText,
   X,
-  UserCircle,
+  Check,
+  ChevronsUpDown,
 } from "lucide-react";
 import { toast } from "sonner";
 import Link from "next/link";
-import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
-import { Check, ChevronsUpDown } from "lucide-react";
 import {
   Command,
   CommandEmpty,
   CommandGroup,
   CommandInput,
   CommandItem,
-  CommandList, // Add CommandList import
+  CommandList,
 } from "@/components/ui/command";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { FieldError } from "@/components/ui/field";
 
-// Enums matching backend
+// Enums matching backend (copied from create page)
 enum UserRole {
   ADMIN = "admin",
   FINANCE_MANAGER = "finance_manager",
@@ -84,20 +81,12 @@ enum DocumentType {
   OTHER = "other",
 }
 
-const documentTypeLabels: Record<string, string> = {
-  [DocumentType.NATIONAL_ID_FRONT]: "هوية العضو (الوجه الأمامي)",
-  [DocumentType.NATIONAL_ID_BACK]: "هوية العضو (الوجه الخلفي)",
-  [DocumentType.PHOTO]: "الصورة الشخصية",
-  [DocumentType.RESIDENCE_CARD_FRONT]: "بطاقة السكن (الوجه الأمامي)",
-  [DocumentType.RESIDENCE_CARD_BACK]: "بطاقة السكن (الوجه الخلفي)",
-  [DocumentType.CERTIFICATE]: "الشهادة / الوثيقة الدراسية",
-  [DocumentType.OTHER]: "مستندات أخرى",
-};
-
-export default function CreateMemberPage() {
+export default function EditMemberPage() {
   const router = useRouter();
+  const params = useParams();
   const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
+  const [isInitializing, setIsInitializing] = useState(true);
 
   // File Upload State Map
   const [selectedFiles, setSelectedFiles] = useState<Record<string, File>>({});
@@ -105,22 +94,32 @@ export default function CreateMemberPage() {
   // Dropdown Data States
   const [provinces, setProvinces] = useState<any[]>([]);
   const [educations, setEducations] = useState<any[]>([]);
-  // We use local constant for roles to ensure matching backend enum,
-  // but we can also fetch from backend if dynamic roles are needed.
-  // For now, blending both: prefer backend IDs but map to our labels if possible.
   const [roles, setRoles] = useState<any[]>([]);
   const [groups, setGroups] = useState<any[]>([]);
-  const [openGroup, setOpenGroup] = useState(false); // For combobox state
+  const [openGroup, setOpenGroup] = useState(false);
 
-  // Fetch Dropdown Data
+  const {
+    register,
+    handleSubmit,
+    setValue,
+    watch,
+    reset,
+    formState: { errors },
+  } = useForm<CreateMemberFormData>({
+    resolver: zodResolver(createMemberSchema),
+  });
+
+  // Fetch Dropdown Data & Member Data
   useEffect(() => {
-    const fetchData = async () => {
+    const initData = async () => {
       try {
-        const [provincesRes, educationsRes, rolesRes] = await Promise.all([
-          apiClient.get("/provinces"),
-          apiClient.get("/educations"),
-          apiClient.get("/roles"),
-        ]);
+        const [provincesRes, educationsRes, rolesRes, groupsRes] =
+          await Promise.all([
+            apiClient.get("/provinces"),
+            apiClient.get("/educations"),
+            apiClient.get("/roles"),
+            apiClient.get("/groups"),
+          ]);
 
         setProvinces(
           Array.isArray(provincesRes) ? provincesRes : provincesRes.data || [],
@@ -131,34 +130,61 @@ export default function CreateMemberPage() {
             : educationsRes.data || [],
         );
         setRoles(Array.isArray(rolesRes) ? rolesRes : rolesRes.data || []);
-
-        // Fetch Groups
-        const groupsRes = await apiClient.get("/groups");
         setGroups(
           Array.isArray(groupsRes.data)
             ? groupsRes.data
             : groupsRes.data.data || [],
         );
+
+        // Fetch Member Data
+        if (params.id) {
+          const { data: member } = await apiClient.get(`/members/${params.id}`);
+
+          // Prepare form data
+          const formData: any = {
+            full_name: member.full_name,
+            last_name: member.last_name,
+            mother_name: member.mother_name,
+            birth_date: member.birth_date
+              ? new Date(member.birth_date).toISOString().split("T")[0]
+              : "",
+            phone: member.phone,
+            national_id: member.national_id,
+            residence: member.residence,
+            landmark: member.landmark,
+            province_id: member.province?.id || member.province_id,
+            education_id: member.education?.id || member.education_id,
+            group_id: member.group?.id || member.group_id,
+            role_id: member.role?.id || member.role_id, // Might need to check account if role is not on member directly
+            specialization: member.specialization,
+            job: member.job,
+            workplace: member.workplace,
+            join_date: member.join_date
+              ? new Date(member.join_date).toISOString().split("T")[0]
+              : "",
+            recommender_name: member.recommender_name,
+            custom_code: member.custom_code,
+            is_banned: member.is_banned,
+          };
+
+          // If member has linked account, populate account fields
+          if (member.account) {
+            formData.email = member.account.email;
+            formData.role_id =
+              member.account.role?.id || member.account.role_id;
+          }
+
+          reset(formData);
+        }
       } catch (error) {
-        console.error("Failed to fetch dropdown data:", error);
-        toast.error("فشل تحميل البيانات الأساسية");
+        console.error("Failed to load data:", error);
+        toast.error("فشل تحميل بيانات العضو");
+      } finally {
+        setIsInitializing(false);
       }
     };
-    fetchData();
-  }, []);
-
-  const {
-    register,
-    handleSubmit,
-    setValue,
-    watch,
-    formState: { errors },
-  } = useForm<CreateMemberFormData>({
-    resolver: zodResolver(createMemberSchema),
-    defaultValues: {
-      is_banned: false,
-    },
-  });
+    initData();
+  }, [params.id, reset]);
 
   const handleFileChange = (
     type: DocumentType,
@@ -181,7 +207,6 @@ export default function CreateMemberPage() {
     setIsLoading(true);
     try {
       // 1. Prepare Member Data
-      // Helper to clean empty strings/nulls
       const cleanData = Object.entries(data).reduce((acc, [key, value]) => {
         if (value !== "" && value !== null && value !== undefined) {
           acc[key] = value;
@@ -189,22 +214,24 @@ export default function CreateMemberPage() {
         return acc;
       }, {} as any);
 
-      // 2. Create Member
-      const memberResponse = await apiClient.post("/members", cleanData);
-      const newMemberId = memberResponse.data?.id;
-
-      if (!newMemberId) {
-        throw new Error("لم يتم العثور على معرف العضو في الاستجابة");
+      // Remove password if empty (user might not want to reset it)
+      if (!cleanData.password) {
+        delete cleanData.password;
       }
 
-      // 3. Upload Documents
+      // Also remove email if it wasn't changed to avoid unique constraint if backend checks heavily (though update usually allows same email on same ID)
+      // Usually Put handles this.
+
+      // 2. Update Member
+      await apiClient.put(`/members/${params.id}`, cleanData);
+
+      // 3. Upload New Documents (if any)
       const uploadPromises = Object.entries(selectedFiles).map(
         async ([type, file]) => {
           const formData = new FormData();
           formData.append("file", file);
-          formData.append("member_id", newMemberId);
+          formData.append("member_id", params.id as string);
           formData.append("document_type", type);
-          // formData.append("is_active", "true");
 
           return apiClient.post("/member-documents", formData, {
             headers: { "Content-Type": "multipart/form-data" },
@@ -214,21 +241,36 @@ export default function CreateMemberPage() {
 
       if (uploadPromises.length > 0) {
         await Promise.all(uploadPromises);
-        toast.success("تم رفع المستندات بنجاح");
+        toast.success("تم رفع المستندات الجديدة بنجاح");
       }
 
-      toast.success("تم إنشاء العضو بنجاح");
+      toast.success("تم تحديث بيانات العضو بنجاح");
       router.push("/dashboard/members");
     } catch (error: any) {
       console.error(error);
-      toast.error(error.response?.data?.message || "فشل إنشاء العضو");
+      const msg = error.response?.data?.message;
+      // Clean error message if it is an array
+      toast.error(
+        typeof msg === "object"
+          ? JSON.stringify(msg)
+          : msg || "فشل تحديث البيانات",
+      );
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Only admin can access
+  if (isInitializing) {
+    return (
+      <div className="flex h-[50vh] items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  // Only admin can access (or same user logic if needed)
   if (user && user.role !== "admin") {
+    // Optional: Allow user to edit their own profile? For now stick to admin.
     return (
       <div className="flex h-[50vh] items-center justify-center text-red-500 font-medium">
         عذراً، انت لا تملك صلاحية للوصول إلى هذه الصفحة
@@ -239,11 +281,9 @@ export default function CreateMemberPage() {
   const UploadZone = ({
     type,
     label,
-    icon: Icon,
   }: {
     type: DocumentType;
     label: string;
-    icon?: any;
   }) => (
     <div className="space-y-3">
       <Label className="text-base font-semibold">{label}</Label>
@@ -251,7 +291,7 @@ export default function CreateMemberPage() {
         <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer bg-muted/5 hover:bg-muted/20 hover:border-primary/50 transition-all">
           <div className="flex flex-col items-center justify-center pt-5 pb-6">
             <Upload className="h-6 w-6 text-muted-foreground mb-2" />
-            <p className="text-sm text-muted-foreground">اضغط لرفع الملف</p>
+            <p className="text-sm text-muted-foreground">اضغط لرفع ملف جديد</p>
           </div>
           <input
             type="file"
@@ -282,7 +322,7 @@ export default function CreateMemberPage() {
             </div>
           )}
           <Button
-            type="button" // Important to prevent form submission
+            type="button"
             variant="destructive"
             size="icon"
             onClick={() => removeFile(type)}
@@ -301,10 +341,10 @@ export default function CreateMemberPage() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b pb-6">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-gray-100">
-            إضافة عضو جديد
+            تعديل بيانات العضو
           </h1>
           <p className="text-muted-foreground mt-2">
-            يرجى ملء جميع البيانات بدقة وإرفاق المستندات المطلوبة
+            يمكنك تعديل البيانات الشخصية والمرفقات من هنا
           </p>
         </div>
         <Link href="/dashboard/members">
@@ -319,17 +359,23 @@ export default function CreateMemberPage() {
         {/* TOP SECTION: Personal Photo & Account Info */}
         <div className="grid gap-8 md:grid-cols-3">
           {/* Right Column: Photo */}
-          <Card className="shadow-md border-t-4 border-t-indigo-500 md:col-span-1">
+          <Card className="shadow-md border-t-4 border-t-amber-500 md:col-span-1">
             <CardHeader>
               <CardTitle className="text-center">الصورة الشخصية</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col items-center justify-center pb-8">
+              {/* Note: Showing existing photo is tricky without fetching documents specifically here.
+                    For simplicity, we just allow uploading a NEW photo. 
+                    If user uploads new, it overrides/adds.
+                 */}
               <div className="relative">
                 {!selectedFiles[DocumentType.PHOTO] ? (
-                  <label className="w-40 h-40 rounded-full border-4 border-dashed border-muted-foreground/30 hover:border-indigo-500 cursor-pointer transition-colors flex items-center justify-center bg-muted/10">
-                    <UserCircle className="w-20 h-20 text-muted-foreground/50" />
-                    <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 bg-black/50 rounded-full transition-opacity">
-                      <Upload className="w-8 h-8 text-white" />
+                  <label className="w-40 h-40 rounded-full border-4 border-dashed border-muted-foreground/30 hover:border-amber-500 cursor-pointer transition-colors flex items-center justify-center bg-muted/10">
+                    <div className="flex flex-col items-center">
+                      <Upload className="w-8 h-8 text-muted-foreground/50 mb-2" />
+                      <span className="text-xs text-muted-foreground">
+                        تغيير الصورة
+                      </span>
                     </div>
                     <input
                       type="file"
@@ -346,7 +392,7 @@ export default function CreateMemberPage() {
                         selectedFiles[DocumentType.PHOTO],
                       )}
                       alt="Profile"
-                      className="w-full h-full object-cover rounded-full border-4 border-indigo-500 shadow-xl"
+                      className="w-full h-full object-cover rounded-full border-4 border-amber-500 shadow-xl"
                     />
                     <button
                       type="button"
@@ -358,20 +404,17 @@ export default function CreateMemberPage() {
                   </div>
                 )}
               </div>
-              <p className="text-xs text-muted-foreground mt-4 text-center">
-                اضغط لرفع صورة شخصية حديثة
-              </p>
             </CardContent>
           </Card>
 
-          {/* Left Column: Account Login Info (Always Visible) */}
-          <Card className="shadow-md border-t-4 border-t-indigo-500 md:col-span-2">
-            <CardHeader className="bg-indigo-50/50 dark:bg-indigo-900/10">
-              <CardTitle className="text-indigo-700 dark:text-indigo-300 flex items-center gap-2">
+          {/* Left Column: Account Login Info */}
+          <Card className="shadow-md border-t-4 border-t-amber-500 md:col-span-2">
+            <CardHeader className="bg-amber-50/50 dark:bg-amber-900/10">
+              <CardTitle className="text-amber-700 dark:text-amber-300 flex items-center gap-2">
                 🔐 بيانات الدخول للنظام
               </CardTitle>
               <CardDescription>
-                هذه البيانات ضرورية لتمكين العضو من تسجيل الدخول
+                اترك كلمة المرور فارغة إذا كنت لا تريد تغييرها
               </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-6 pt-6">
@@ -383,22 +426,22 @@ export default function CreateMemberPage() {
                   <Input
                     {...register("email")}
                     type="email"
-                    placeholder="email@org.iq"
                     dir="ltr"
                     className="text-right"
                   />
                   {errors.email && (
-                    <FieldError>{errors.email.message}</FieldError>
+                    <p className="text-sm text-red-500">
+                      {errors.email.message}
+                    </p>
                   )}
                 </div>
                 <div className="space-y-2">
-                  <Label>
-                    كلمة المرور <span className="text-red-500">*</span>
-                  </Label>
-                  <Input {...register("password")} type="password" />
-                  {errors.password && (
-                    <FieldError>{errors.password.message}</FieldError>
-                  )}
+                  <Label>كلمة المرور (اختياري)</Label>
+                  <Input
+                    {...register("password")}
+                    type="password"
+                    placeholder="********"
+                  />
                 </div>
               </div>
 
@@ -406,16 +449,17 @@ export default function CreateMemberPage() {
                 <Label>
                   الصلاحية / الدور <span className="text-red-500">*</span>
                 </Label>
-                <Select onValueChange={(val) => setValue("role_id", val)}>
+                <Select
+                  value={watch("role_id")}
+                  onValueChange={(val) => setValue("role_id", val)}
+                  dir="rtl"
+                >
                   <SelectTrigger className="h-11">
                     <SelectValue placeholder="اختر الصلاحية" />
                   </SelectTrigger>
                   <SelectContent>
                     {roles.map((r) => {
-                      // Try to map backend role name to our Arabic label
-                      // Check if r.name or r.role_name matches our enum values
                       const legacyName = r.name || r.role_name;
-                      // Try to find if the legacy name matches any enum value
                       const enumMatch = Object.values(UserRole).find(
                         (role) => role === legacyName,
                       );
@@ -429,19 +473,12 @@ export default function CreateMemberPage() {
                         </SelectItem>
                       );
                     })}
-                    {/* Fallback if roles list is empty or strict enum required by backend but not in DB yet? 
-                            Ideally, we trust the DB roles to be seeded with correct enum values.
-                            But if the user wants strictly these enums in the dropdown, we might need to rely on DB having them. 
-                        */}
                   </SelectContent>
                 </Select>
-                {/* {errors.role_id && (
+                {errors.role_id && (
                   <p className="text-sm text-red-500">
                     {errors.role_id.message}
                   </p>
-                )} */}
-                {errors.role_id && (
-                  <FieldError>{errors.role_id.message}</FieldError>
                 )}
               </div>
             </CardContent>
@@ -458,57 +495,37 @@ export default function CreateMemberPage() {
               <Label>
                 الاسم الكامل <span className="text-red-500">*</span>
               </Label>
-              <Input
-                {...register("full_name")}
-                placeholder="الاسم الرباعي واللقب"
-                className="h-11 text-lg"
-              />
+              <Input {...register("full_name")} className="h-11 text-lg" />
               {errors.full_name && (
-                <FieldError>{errors.full_name.message}</FieldError>
+                <p className="text-sm text-red-500">
+                  {errors.full_name.message}
+                </p>
               )}
             </div>
 
             <div className="space-y-2">
               <Label>اللقب</Label>
               <Input {...register("last_name")} />
-              {errors.last_name && (
-                <FieldError>{errors.last_name.message}</FieldError>
-              )}
             </div>
 
             <div className="space-y-2">
               <Label>اسم الأم</Label>
               <Input {...register("mother_name")} />
-              {errors.mother_name && (
-                <FieldError>{errors.mother_name.message}</FieldError>
-              )}
             </div>
 
             <div className="space-y-2">
               <Label>تاريخ الميلاد</Label>
               <Input type="date" {...register("birth_date")} />
-              {errors.birth_date && (
-                <FieldError>{errors.birth_date.message}</FieldError>
-              )}
             </div>
 
             <div className="space-y-2">
               <Label>رقم الهاتف</Label>
-              <Input
-                {...register("phone")}
-                placeholder="07xxxxxxxxx"
-                dir="ltr"
-                className="text-right"
-              />
-              {errors.phone && <FieldError>{errors.phone.message}</FieldError>}
+              <Input {...register("phone")} dir="ltr" className="text-right" />
             </div>
 
             <div className="space-y-2">
               <Label>رقم الهوية / البطاقة الموحدة</Label>
               <Input {...register("national_id")} />
-              {errors.national_id && (
-                <FieldError>{errors.national_id.message}</FieldError>
-              )}
             </div>
           </CardContent>
         </Card>
@@ -523,8 +540,9 @@ export default function CreateMemberPage() {
               <div className="space-y-2">
                 <Label>المحافظة</Label>
                 <Select
-                  dir="rtl"
+                  value={watch("province_id")}
                   onValueChange={(val) => setValue("province_id", val)}
+                  dir="rtl"
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="اختر المحافظة" />
@@ -537,26 +555,14 @@ export default function CreateMemberPage() {
                     ))}
                   </SelectContent>
                 </Select>
-                {errors.province_id && (
-                  <FieldError>{errors.province_id.message}</FieldError>
-                )}
               </div>
               <div className="space-y-2">
                 <Label>عنوان السكن</Label>
-                <Input
-                  {...register("residence")}
-                  placeholder="القضاء، الناحية، الحي"
-                />
-                {errors.residence && (
-                  <FieldError>{errors.residence.message}</FieldError>
-                )}
+                <Input {...register("residence")} />
               </div>
               <div className="space-y-2">
                 <Label>أقرب نقطة دالة</Label>
                 <Input {...register("landmark")} />
-                {errors.landmark && (
-                  <FieldError>{errors.landmark.message}</FieldError>
-                )}
               </div>
             </CardContent>
           </Card>
@@ -569,8 +575,9 @@ export default function CreateMemberPage() {
               <div className="space-y-2">
                 <Label>التحصيل الدراسي</Label>
                 <Select
-                  dir="rtl"
+                  value={watch("education_id")}
                   onValueChange={(val) => setValue("education_id", val)}
+                  dir="rtl"
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="اختر التحصيل الدراسي" />
@@ -583,37 +590,16 @@ export default function CreateMemberPage() {
                     ))}
                   </SelectContent>
                 </Select>
-                {errors.education_id && (
-                  <FieldError>{errors.education_id.message}</FieldError>
-                )}
               </div>
               <div className="space-y-2">
                 <Label>التخصص</Label>
                 <Input {...register("specialization")} />
-                {errors.specialization && (
-                  <FieldError>{errors.specialization.message}</FieldError>
-                )}
               </div>
-              <div className="space-y-2 flex flex-row gap-2 w-full">
-                <div>
-                  <Label className="pb-2">الوظيفة</Label>
-                  <Input
-                    className="pb-2"
-                    {...register("job")}
-                    placeholder="الوظيفة"
-                  />
-                  {errors.job && <FieldError>{errors.job.message}</FieldError>}
-                </div>
-                <div>
-                  <Label className="pb-2">مكان العمل</Label>
-                  <Input
-                    className="pb-2"
-                    {...register("workplace")}
-                    placeholder="مكان العمل"
-                  />
-                  {errors.workplace && (
-                    <FieldError>{errors.workplace.message}</FieldError>
-                  )}
+              <div className="space-y-2">
+                <Label>الوظيفة & مكان العمل</Label>
+                <div className="flex gap-2">
+                  <Input {...register("job")} placeholder="الوظيفة" />
+                  <Input {...register("workplace")} placeholder="مكان العمل" />
                 </div>
               </div>
             </CardContent>
@@ -629,25 +615,17 @@ export default function CreateMemberPage() {
             <div className="space-y-2">
               <Label>تاريخ الانتماء</Label>
               <Input type="date" {...register("join_date")} />
-              {errors.join_date && (
-                <FieldError>{errors.join_date.message}</FieldError>
-              )}
             </div>
             <div className="space-y-2">
               <Label>اسم المزكي</Label>
               <Input {...register("recommender_name")} />
-              {errors.recommender_name && (
-                <FieldError>{errors.recommender_name.message}</FieldError>
-              )}
             </div>
             <div className="space-y-2">
               <Label>كود خاص</Label>
               <Input {...register("custom_code")} />
-              {errors.custom_code && (
-                <FieldError>{errors.custom_code.message}</FieldError>
-              )}
             </div>
 
+            {/* Group Selection */}
             <div className="space-y-2">
               <Label>المجموعة (اختياري)</Label>
               <Popover open={openGroup} onOpenChange={setOpenGroup}>
@@ -698,11 +676,6 @@ export default function CreateMemberPage() {
                   </Command>
                 </PopoverContent>
               </Popover>
-              {errors.group_id && (
-                <p className="text-sm text-red-500">
-                  {errors.group_id.message}
-                </p>
-              )}
             </div>
           </CardContent>
         </Card>
@@ -710,9 +683,9 @@ export default function CreateMemberPage() {
         {/* Documents Grid */}
         <Card className="shadow-sm">
           <CardHeader className="bg-muted/30">
-            <CardTitle>📂 المستندات والمرفقات</CardTitle>
+            <CardTitle>📂 تحديث المستندات</CardTitle>
             <CardDescription>
-              يرجى رفع صور واضحة للمستندات المطلوبة
+              يمكنك رفع مستندات جديدة لتحديثها (ستضاف إلى المستندات الحالية)
             </CardDescription>
           </CardHeader>
           <CardContent className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 pt-6">
@@ -752,19 +725,18 @@ export default function CreateMemberPage() {
             <Button
               type="submit"
               size="lg"
-              className="min-w-[150px] text-lg bg-indigo-600 hover:bg-indigo-700 text-white"
+              className="min-w-[150px] text-lg bg-amber-600 hover:bg-amber-700 text-white"
               disabled={isLoading}
             >
               {isLoading ? (
                 <>
-                  console.log("loading");
                   <Loader2 className="ml-2 h-5 w-5 animate-spin" />
                   جاري الحفظ...
                 </>
               ) : (
                 <>
                   <Save className="ml-2 h-5 w-5" />
-                  حفظ البيانات
+                  حفظ التعديلات
                 </>
               )}
             </Button>
