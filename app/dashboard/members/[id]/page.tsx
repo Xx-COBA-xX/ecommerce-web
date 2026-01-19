@@ -138,7 +138,9 @@ export default function MemberDetailsPage() {
 
   const getFileUrl = (doc?: MemberDocument) => {
     if (!doc) return undefined;
-    if (doc.file_key) return `${R2_DOMAIN}/${doc.file_key}`;
+    if (doc.file_key) return( 
+      console.log(`${R2_DOMAIN}/${doc.file_key}`),
+      `${R2_DOMAIN}/${doc.file_key}`);
     return doc.file_url;
   };
 

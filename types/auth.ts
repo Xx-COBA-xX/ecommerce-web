@@ -6,6 +6,7 @@ export interface User {
     id: string;
     full_name: string;
     phone?: string;
+    image_url?: string;
   };
 }
 

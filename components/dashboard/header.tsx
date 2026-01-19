@@ -26,9 +26,14 @@ const routeNames: Record<string, string> = {
   dashboard: "الرئيسية",
   members: "الأعضاء",
   create: "إضافة جديد",
+  new: "إضافة جديد",
+  edit: "تعديل",
   settings: "الإعدادات",
   analytics: "التحليلات",
   profile: "الملف الشخصي",
+  sectors: "القطاعات",
+  groups: "المجاميع",
+  notifications: "الإشعارات",
 };
 
 export function DashboardHeader() {
@@ -53,7 +58,11 @@ export function DashboardHeader() {
               {paths.map((path, index) => {
                 // Skip 'dashboard' redundancy if we want, but let's keep logic simple
                 if (path === "dashboard" && index === 0 && paths.length > 1)
-                  return <BreadcrumbSeparator key={`sep-${index}`} />;
+                  return (
+                    <BreadcrumbSeparator key={`sep-${index}`}>
+                      <ChevronLeft className="h-4 w-4" />
+                    </BreadcrumbSeparator>
+                  );
                 if (path === "dashboard") return null;
 
                 const href = `/${paths.slice(0, index + 1).join("/")}`;
@@ -62,7 +71,9 @@ export function DashboardHeader() {
 
                 return (
                   <div key={path} className="flex items-center">
-                    <BreadcrumbSeparator className="mx-2" />
+                    <BreadcrumbSeparator className="mx-2">
+                      <ChevronLeft className="h-4 w-4" />
+                    </BreadcrumbSeparator>
                     <BreadcrumbItem>
                       {isLast ? (
                         <BreadcrumbPage>{name}</BreadcrumbPage>

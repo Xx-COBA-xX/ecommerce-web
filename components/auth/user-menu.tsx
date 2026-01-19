@@ -39,13 +39,17 @@ export function UserMenu() {
     : user.email.substring(0, 2).toUpperCase();
 
   return (
-    <DropdownMenu>
+    <DropdownMenu dir="rtl">
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" className="relative h-10 w-10 rounded-full">
           <Avatar className="h-10 w-10 border-2 border-primary/10 transition-all hover:border-primary">
             <AvatarImage
-              src={`https://ui-avatars.com/api/?name=${initials}&background=random`}
+              src={
+               'https://pub-78f212f5cfc14ae7baadced9bbb60ce3.r2.dev/' + user.member?.image_url ||
+                `https://ui-avatars.com/api/?name=${initials}&background=random`
+              }
               alt={user.member?.full_name || "User"}
+              className="object-cover"
             />
             <AvatarFallback className="bg-primary/10 text-primary font-bold">
               {initials}
@@ -54,7 +58,7 @@ export function UserMenu() {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent className="w-56" align="end" forceMount>
-        <DropdownMenuLabel className="font-normal">
+        <DropdownMenuLabel className="font-normal"> 
           <div className="flex flex-col space-y-1">
             <p className="text-sm font-medium leading-none">
               {user.member?.full_name || "المستخدم"}

@@ -213,7 +213,9 @@ export default function MembersPage() {
                         {member.group.name}
                       </Badge>
                     ) : (
-                      "-"
+                      <Badge variant="outline" className="font-normal">
+                        لا يوجد مجموعة
+                      </Badge>
                     )}
                   </TableCell>
                   <TableCell>
