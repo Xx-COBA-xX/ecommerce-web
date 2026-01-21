@@ -64,6 +64,7 @@ enum UserRole {
   GROUP_LEADER = "group_leader",
   TRAINER = "trainer",
   VISIT_ADMIN = "visit_admin",
+  MEMBER = "member",
 }
 
 const userRoleLabels: Record<string, string> = {
@@ -72,6 +73,7 @@ const userRoleLabels: Record<string, string> = {
   [UserRole.GROUP_LEADER]: "مسؤول مجموعة",
   [UserRole.TRAINER]: "مدرب",
   [UserRole.VISIT_ADMIN]: "مسؤول زيارات",
+  [UserRole.MEMBER]: "منتسب",
 };
 
 enum DocumentType {
@@ -180,44 +182,41 @@ export default function CreateMemberPage() {
   const onSubmit = async (data: CreateMemberFormData) => {
     setIsLoading(true);
     try {
-      // 1. Prepare Member Data
-      // Helper to clean empty strings/nulls
-      const cleanData = Object.entries(data).reduce((acc, [key, value]) => {
+      // Create FormData to send both member data and files together
+      const formData = new FormData();
+
+      // 1. Append all member data fields
+      Object.entries(data).forEach(([key, value]) => {
         if (value !== "" && value !== null && value !== undefined) {
-          acc[key] = value;
+          formData.append(key, value.toString());
         }
-        return acc;
-      }, {} as any);
+      });
 
-      // 2. Create Member
-      const memberResponse = await apiClient.post("/members", cleanData);
-      const newMemberId = memberResponse.data?.id;
+      // 2. Append files with their correct field names matching backend expectations
+      // Backend expects: photo, national_id_front, national_id_back, residence_card_front, residence_card_back
+      const fileMapping: Record<DocumentType, string> = {
+        [DocumentType.PHOTO]: "photo",
+        [DocumentType.NATIONAL_ID_FRONT]: "national_id_front",
+        [DocumentType.NATIONAL_ID_BACK]: "national_id_back",
+        [DocumentType.RESIDENCE_CARD_FRONT]: "residence_card_front",
+        [DocumentType.RESIDENCE_CARD_BACK]: "residence_card_back",
+        [DocumentType.CERTIFICATE]: "certificate",
+        [DocumentType.OTHER]: "other",
+      };
 
-      if (!newMemberId) {
-        throw new Error("لم يتم العثور على معرف العضو في الاستجابة");
-      }
+      Object.entries(selectedFiles).forEach(([type, file]) => {
+        const fieldName = fileMapping[type as DocumentType];
+        if (fieldName) {
+          formData.append(fieldName, file);
+        }
+      });
 
-      // 3. Upload Documents
-      const uploadPromises = Object.entries(selectedFiles).map(
-        async ([type, file]) => {
-          const formData = new FormData();
-          formData.append("file", file);
-          formData.append("member_id", newMemberId);
-          formData.append("document_type", type);
-          // formData.append("is_active", "true");
+      // 3. Send single request with both data and files
+      const memberResponse = await apiClient.post("/members", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
 
-          return apiClient.post("/member-documents", formData, {
-            headers: { "Content-Type": "multipart/form-data" },
-          });
-        },
-      );
-
-      if (uploadPromises.length > 0) {
-        await Promise.all(uploadPromises);
-        toast.success("تم رفع المستندات بنجاح");
-      }
-
-      toast.success("تم إنشاء العضو بنجاح");
+      toast.success("تم إنشاء العضو ورفع المستندات بنجاح");
       router.push("/dashboard/members");
     } catch (error: any) {
       console.error(error);
@@ -400,49 +399,6 @@ export default function CreateMemberPage() {
                     <FieldError>{errors.password.message}</FieldError>
                   )}
                 </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label>
-                  الصلاحية / الدور <span className="text-red-500">*</span>
-                </Label>
-                <Select onValueChange={(val) => setValue("role_id", val)}>
-                  <SelectTrigger className="h-11">
-                    <SelectValue placeholder="اختر الصلاحية" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {roles.map((r) => {
-                      // Try to map backend role name to our Arabic label
-                      // Check if r.name or r.role_name matches our enum values
-                      const legacyName = r.name || r.role_name;
-                      // Try to find if the legacy name matches any enum value
-                      const enumMatch = Object.values(UserRole).find(
-                        (role) => role === legacyName,
-                      );
-                      const displayLabel = enumMatch
-                        ? userRoleLabels[enumMatch]
-                        : legacyName;
-
-                      return (
-                        <SelectItem key={r.id} value={r.id}>
-                          {displayLabel}
-                        </SelectItem>
-                      );
-                    })}
-                    {/* Fallback if roles list is empty or strict enum required by backend but not in DB yet? 
-                            Ideally, we trust the DB roles to be seeded with correct enum values.
-                            But if the user wants strictly these enums in the dropdown, we might need to rely on DB having them. 
-                        */}
-                  </SelectContent>
-                </Select>
-                {/* {errors.role_id && (
-                  <p className="text-sm text-red-500">
-                    {errors.role_id.message}
-                  </p>
-                )} */}
-                {errors.role_id && (
-                  <FieldError>{errors.role_id.message}</FieldError>
-                )}
               </div>
             </CardContent>
           </Card>
@@ -757,7 +713,6 @@ export default function CreateMemberPage() {
             >
               {isLoading ? (
                 <>
-                  console.log("loading");
                   <Loader2 className="ml-2 h-5 w-5 animate-spin" />
                   جاري الحفظ...
                 </>

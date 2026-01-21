@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 import { apiClient } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,7 +11,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Loader2, Check, ChevronsUpDown } from "lucide-react";
+import { Loader2, Check, ChevronsUpDown, UserCog } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Command,
@@ -26,42 +26,27 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Badge } from "@/components/ui/badge";
+import { ChangeLeaderDialog } from "@/components/sectors/change-leader-dialog";
 
 const formSchema = z.object({
   name: z.string().min(2, "الاسم يجب أن يكون حرفين على الأقل"),
   code: z.string().min(2, "الكود يجب أن يكون حرفين على الأقل"),
   province_id: z.string().min(1, "يجب اختيار المحافظة"),
-  leader_id: z.string().optional(),
 });
 
 type FormValues = z.infer<typeof formSchema>;
 
-// Helper function to get Arabic role labels
-const getRoleLabel = (roleName: string): string => {
-  const roleLabels: Record<string, string> = {
-    admin: "مدير النظام",
-    finance_manager: "مدير مالي",
-    sector_leader: "مسؤول قاطع",
-    group_leader: "مسؤول مجموعة",
-    trainer: "مدرب",
-    visit_admin: "مسؤول زيارات",
-    member: "منتسب",
-  };
-  return roleLabels[roleName] || roleName;
-};
-
-export default function AddSectorPage() {
+export default function EditSectorPage() {
   const router = useRouter();
+  const params = useParams();
+  const id = params.id as string;
+
   const [loading, setLoading] = useState(false);
-
-  // Data State
+  const [fetching, setFetching] = useState(true);
+  const [sector, setSector] = useState<any>(null);
   const [provinces, setProvinces] = useState<any[]>([]);
-  const [members, setMembers] = useState<any[]>([]);
-
-  // Popover State
   const [openProvince, setOpenProvince] = useState(false);
-  const [openLeader, setOpenLeader] = useState(false);
+  const [changeLeaderOpen, setChangeLeaderOpen] = useState(false);
 
   const {
     register,
@@ -69,6 +54,7 @@ export default function AddSectorPage() {
     setValue,
     watch,
     formState: { errors },
+    reset,
   } = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -80,31 +66,53 @@ export default function AddSectorPage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [provincesRes, membersRes] = await Promise.all([
+        setFetching(true);
+        const [sectorData, provincesData] = await Promise.all([
+          apiClient.getSector(id),
           apiClient.getProvinces(),
-          apiClient.getMembers({ limit: 100 }), // Fetch first 100 members for now
         ]);
 
-        setProvinces(provincesRes);
-        setMembers(membersRes.data || membersRes.items || []);
+        setSector(sectorData);
+        setProvinces(provincesData);
+
+        reset({
+          name: sectorData.name,
+          code: sectorData.code,
+          province_id: sectorData.province?.id,
+        });
       } catch (error) {
-        console.error("Failed to fetch initial data:", error);
-        toast.error("فشل تحميل البيانات الأولية");
+        console.error("Failed to fetch data:", error);
+        toast.error("فشل تحميل البيانات");
+        router.push("/dashboard/sectors");
+      } finally {
+        setFetching(false);
       }
     };
-    fetchData();
-  }, []);
+
+    if (id) {
+      fetchData();
+    }
+  }, [id, reset, router]);
+
+  const refetchSector = async () => {
+    try {
+      const sectorData = await apiClient.getSector(id);
+      setSector(sectorData);
+    } catch (error) {
+      console.error("Failed to refetch sector:", error);
+    }
+  };
 
   const onSubmit = async (values: FormValues) => {
     try {
       setLoading(true);
-      await apiClient.createSector(values);
-      toast.success("تم إنشاء القاطع بنجاح");
+      await apiClient.updateSector(id, values);
+      toast.success("تم تحديث القاطع بنجاح");
       router.push("/dashboard/sectors");
     } catch (error: any) {
-      console.error("Failed to create sector:", error);
+      console.error("Failed to update sector:", error);
       toast.error(
-        "فشل إنشاء القاطع: " +
+        "فشل تحديث القاطع: " +
           (error.response?.data?.message || "خطأ غير معروف"),
       );
     } finally {
@@ -112,11 +120,19 @@ export default function AddSectorPage() {
     }
   };
 
+  if (fetching) {
+    return (
+      <div className="flex h-[50vh] items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 max-w-2xl mx-auto space-y-6" dir="rtl">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">إضافة قاطع جديد</h1>
-        <p className="text-muted-foreground mt-2">أدخل بيانات القاطع الجديد</p>
+        <h1 className="text-3xl font-bold tracking-tight">تعديل القاطع</h1>
+        <p className="text-muted-foreground mt-2">تعديل بيانات القاطع الحالي</p>
       </div>
 
       <Card>
@@ -208,68 +224,26 @@ export default function AddSectorPage() {
                 )}
               </div>
 
-              {/* Leader Selection */}
+              {/* Leader - Read Only with Change Button */}
               <div className="space-y-2">
                 <Label>قائد القاطع</Label>
-                <Popover open={openLeader} onOpenChange={setOpenLeader}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      role="combobox"
-                      aria-expanded={openLeader}
-                      className="w-full justify-between font-normal text-right"
-                    >
-                      <span className="truncate">
-                        {watch("leader_id")
-                          ? members.find((m) => m.id === watch("leader_id"))
-                              ?.full_name
-                          : "اختر القائد"}
-                      </span>
-                      <ChevronsUpDown className="mr-2 h-4 w-4 shrink-0 opacity-50" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-[300px] p-0" align="start">
-                    <Command>
-                      <CommandInput placeholder="ابحث عن عضو..." />
-                      <CommandList>
-                        <CommandEmpty>لا توجد نتائج.</CommandEmpty>
-                        <CommandGroup>
-                          {members.map((member) => (
-                            <CommandItem
-                              key={member.id}
-                              value={member.full_name}
-                              onSelect={() => {
-                                setValue("leader_id", member.id);
-                                setOpenLeader(false);
-                              }}
-                            >
-                              <Check
-                                className={cn(
-                                  "mr-2 h-4 w-4",
-                                  watch("leader_id") === member.id
-                                    ? "opacity-100"
-                                    : "opacity-0",
-                                )}
-                              />
-                              <div className="flex items-center justify-between w-full">
-                                <span>{member.full_name}</span>
-                                {member.account?.role && (
-                                  <Badge
-                                    variant="secondary"
-                                    className="mr-2 text-xs"
-                                  >
-                                    {getRoleLabel(member.account.role.name)}
-                                  </Badge>
-                                )}
-                              </div>
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
-                <p className="text-sm text-muted-foreground">اختياري</p>
+                <div className="flex gap-2">
+                  <Input
+                    value={sector?.leader?.full_name || "لا يوجد قائد"}
+                    disabled
+                    className="flex-1"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setChangeLeaderOpen(true)}
+                  >
+                    <UserCog className="h-4 w-4" />
+                  </Button>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  استخدم زر التغيير لتعيين قائد جديد
+                </p>
               </div>
             </div>
 
@@ -284,12 +258,20 @@ export default function AddSectorPage() {
               </Button>
               <Button type="submit" disabled={loading}>
                 {loading && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}
-                إنشاء القاطع
+                حفظ التغييرات
               </Button>
             </div>
           </form>
         </CardContent>
       </Card>
+
+      <ChangeLeaderDialog
+        open={changeLeaderOpen}
+        onOpenChange={setChangeLeaderOpen}
+        sectorId={id}
+        currentLeader={sector?.leader}
+        onSuccess={refetchSector}
+      />
     </div>
   );
 }

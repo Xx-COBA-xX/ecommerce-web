@@ -31,6 +31,7 @@ import {
   Loader2,
   ShieldAlert,
   CheckCircle2,
+  Edit,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -130,7 +131,12 @@ export default function SectorDetailsPage() {
             </p>
           </div>
         </div>
-        <div className="flex gap-2">{/* Edit button could go here */}</div>
+        <div className="flex gap-2">
+          <Button onClick={() => router.push(`/dashboard/sectors/${id}/edit`)}>
+            <Edit className="ml-2 h-4 w-4" />
+            تعديل القاطع
+          </Button>
+        </div>
       </div>
 
       {/* Overview Cards */}

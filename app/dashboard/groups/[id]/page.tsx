@@ -6,6 +6,7 @@ import { apiClient } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
@@ -26,6 +27,9 @@ import {
   Trophy,
   Coins,
   MoreHorizontal,
+  Eye,
+  Trash2,
+  Pencil,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -34,6 +38,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
+import Image from "next/image";
 
 export default function GroupDetailsPage() {
   const params = useParams();
@@ -113,28 +118,43 @@ export default function GroupDetailsPage() {
     );
   }
 
+  const R2_DOMAIN = "https://pub-78f212f5cfc14ae7baadced9bbb60ce3.r2.dev";
+  const logoUrl = group.logo_key ? `${R2_DOMAIN}/${group.logo_key}` : null;
+  const groupInitials = group.name
+    .split(" ")
+    .map((n: string) => n[0])
+    .join("")
+    .substring(0, 2);
+
   return (
     <div className="container mx-auto pb-10 space-y-8" dir="rtl">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" onClick={() => router.back()}>
-            <ArrowRight className="h-5 w-5" />
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-4">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => router.push("/dashboard/groups")}
+          >
+            <ArrowRight className="h-4 w-4 ml-2" />
+            رجوع إلى المجاميع
           </Button>
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">
-              تفاصيل المجموعة
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              {group.name} ({group.code})
-            </p>
+            <h1 className="text-3xl font-bold">{group.name}</h1>
+            <p className="text-muted-foreground">معلومات المجموعة التفصيلية</p>
           </div>
         </div>
+        <Button
+          onClick={() => router.push(`/dashboard/groups/${params.id}/edit`)}
+        >
+          <Pencil className="h-4 w-4 ml-2" />
+          تعديل المجموعة
+        </Button>
       </div>
 
       {/* Overview Cards */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {/* Basic Info */}
+        {/* Basic Info with Logo */}
         <Card className="md:col-span-2">
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
@@ -143,44 +163,61 @@ export default function GroupDetailsPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <div className="text-sm text-muted-foreground">
-                  اسم المجموعة
+            <div className="flex items-start gap-6">
+              {/* Group Logo */}
+              <Avatar className="h-24 w-24 border-2 border-indigo-200">
+                {logoUrl && (
+                  <AvatarImage
+                    src={logoUrl}
+                    alt={group.name}
+                    className="object-cover"
+                  />
+                )}
+                <AvatarFallback className="bg-indigo-100 text-indigo-700 text-2xl font-bold">
+                  {groupInitials}
+                </AvatarFallback>
+              </Avatar>
+
+              {/* Info Grid */}
+              <div className="flex-1 grid grid-cols-2 gap-4">
+                <div>
+                  <div className="text-sm text-muted-foreground">
+                    اسم المجموعة
+                  </div>
+                  <div className="font-medium">{group.name}</div>
                 </div>
-                <div className="font-medium">{group.name}</div>
-              </div>
-              <div>
-                <div className="text-sm text-muted-foreground">الكود</div>
-                <div className="font-medium font-mono">{group.code}</div>
-              </div>
-              <div>
-                <div className="text-sm text-muted-foreground">القطاع</div>
-                <div className="font-medium flex items-center gap-1">
-                  <Building2 className="h-4 w-4 text-muted-foreground" />
-                  {group.sector?.name || "-"}
+                <div>
+                  <div className="text-sm text-muted-foreground">الكود</div>
+                  <div className="font-medium font-mono">{group.code}</div>
                 </div>
-              </div>
-              <div>
-                <div className="text-sm text-muted-foreground">المحافظة</div>
-                <div className="font-medium flex items-center gap-1">
-                  <MapPin className="h-4 w-4 text-muted-foreground" />
-                  {group.province?.name || "-"}
+                <div>
+                  <div className="text-sm text-muted-foreground">القطاع</div>
+                  <div className="font-medium flex items-center gap-1">
+                    <Building2 className="h-4 w-4 text-muted-foreground" />
+                    {group.sector?.name || "-"}
+                  </div>
                 </div>
-              </div>
-              <div>
-                <div className="text-sm text-muted-foreground">الحالة</div>
-                <Badge variant={!group.is_banned ? "default" : "destructive"}>
-                  {!group.is_banned ? "نشط" : "محظور"}
-                </Badge>
-              </div>
-              <div>
-                <div className="text-sm text-muted-foreground">
-                  تاريخ الإنشاء
+                <div>
+                  <div className="text-sm text-muted-foreground">المحافظة</div>
+                  <div className="font-medium flex items-center gap-1">
+                    <MapPin className="h-4 w-4 text-muted-foreground" />
+                    {group.province?.name || "-"}
+                  </div>
                 </div>
-                <div className="font-medium flex items-center gap-1">
-                  <Calendar className="h-4 w-4 text-muted-foreground" />
-                  {new Date(group.created_at).toLocaleDateString("ar-EG")}
+                <div>
+                  <div className="text-sm text-muted-foreground">الحالة</div>
+                  <Badge variant={!group.is_banned ? "default" : "destructive"}>
+                    {!group.is_banned ? "نشط" : "محظور"}
+                  </Badge>
+                </div>
+                <div>
+                  <div className="text-sm text-muted-foreground">
+                    تاريخ الإنشاء
+                  </div>
+                  <div className="font-medium flex items-center gap-1">
+                    <Calendar className="h-4 w-4 text-muted-foreground" />
+                    {new Date(group.created_at).toLocaleDateString("ar-EG")}
+                  </div>
                 </div>
               </div>
             </div>
@@ -267,7 +304,7 @@ export default function GroupDetailsPage() {
         </Card>
       </div>
 
-      <Tabs defaultValue="members" className="w-full">
+      <Tabs defaultValue="members" className="w-full" dir="rtl">
         <TabsList className="grid w-full grid-cols-2 max-w-[400px]">
           <TabsTrigger value="members">الأعضاء ({membersTotal})</TabsTrigger>
           <TabsTrigger value="overview">سجل النشاطات</TabsTrigger>
@@ -286,7 +323,9 @@ export default function GroupDetailsPage() {
                     <TableHead className="text-right">الكود</TableHead>
                     <TableHead className="text-right">رقم الهاتف</TableHead>
                     <TableHead className="text-right">نوع الانتماء</TableHead>
-                    <TableHead className="w-[70px]"></TableHead>
+                    <TableHead className="text-right w-[100px]">
+                      الإجراءات
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -316,22 +355,29 @@ export default function GroupDetailsPage() {
                         <TableCell>{member.phone || "-"}</TableCell>
                         <TableCell>{member.role_name || "-"}</TableCell>
                         <TableCell>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" className="h-8 w-8 p-0">
-                                <MoreHorizontal className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem
-                                onClick={() =>
-                                  router.push(`/dashboard/members/${member.id}`)
-                                }
-                              >
-                                عرض التفاصيل
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              onClick={() =>
+                                router.push(`/dashboard/members/${member.id}`)
+                              }
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-destructive hover:text-destructive"
+                              onClick={() => {
+                                // TODO: Implement delete functionality
+                                toast.info("سيتم تفعيل الحذف قريباً");
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))

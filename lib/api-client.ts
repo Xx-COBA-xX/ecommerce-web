@@ -115,6 +115,21 @@ class ApiClient {
     return response.data;
   }
 
+  async uploadGroupLogo(groupId: string, file: File) {
+    const formData = new FormData();
+    formData.append("file", file);
+    const response = await this.client.post(
+      `/groups/${groupId}/upload-logo`,
+      formData,
+      {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      },
+    );
+    return response.data;
+  }
+
   async updateGroup(id: string, data: any) {
     const response = await this.client.patch(`/groups/${id}`, data);
     return response.data;
@@ -122,6 +137,16 @@ class ApiClient {
 
   async deleteGroup(id: string) {
     const response = await this.client.delete(`/groups/${id}`);
+    return response.data;
+  }
+
+  async changeGroupLeader(groupId: string, newLeaderId: string) {
+    const response = await this.client.patch(
+      `/groups/${groupId}/change-leader`,
+      {
+        new_leader_id: newLeaderId,
+      },
+    );
     return response.data;
   }
 
@@ -145,8 +170,8 @@ class ApiClient {
   }
 
   // Sector methods
-  async getSectors() {
-    const response = await this.client.get("/sectors");
+  async getSectors(params?: any) {
+    const response = await this.client.get("/sectors", { params });
     return response.data;
   }
 
@@ -172,6 +197,16 @@ class ApiClient {
 
   async deleteSector(id: string) {
     const response = await this.client.delete(`/sectors/${id}`);
+    return response.data;
+  }
+
+  async changeSectorLeader(sectorId: string, newLeaderId: string) {
+    const response = await this.client.patch(
+      `/sectors/${sectorId}/change-leader`,
+      {
+        new_leader_id: newLeaderId,
+      },
+    );
     return response.data;
   }
 }

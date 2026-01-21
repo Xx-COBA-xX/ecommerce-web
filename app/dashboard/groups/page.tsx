@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { apiClient } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,45 +22,63 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Search,
   Plus,
-  MoreHorizontal,
+  Search,
   Building2,
   MapPin,
-  Users,
+  User,
+  Eye,
+  Trash2,
+  Pencil,
 } from "lucide-react";
 import { toast } from "sonner";
 
 export default function GroupsPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [limit] = useState(10);
+  const isMounted = useRef(false);
+
+  // Debounced search
+  useEffect(() => {
+    if (!isMounted.current) {
+      isMounted.current = true;
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setPage(1);
+      // Force fetch if page is already 1
+      if (page === 1) {
+        fetchGroups(1);
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   useEffect(() => {
-    fetchGroups();
-  }, [page, searchQuery]);
+    fetchGroups(page);
+  }, [page]);
 
-  const fetchGroups = async () => {
+  const fetchGroups = async (pageNum: number) => {
     try {
       setLoading(true);
       const response = await apiClient.getGroups({
-        page,
+        page: pageNum,
         limit,
-        search: searchQuery,
+        search: searchQuery || undefined,
       });
-      console.log(response);
-      if (Array.isArray(response)) {
-        setData(response);
-        setTotal(response.length);
-      } else {
-        setData(response.data || response.items || []);
-        setTotal(response.meta?.totalItems || response.total || 0);
-      }
+
+      // Backend now returns PaginatedResponseDto
+      const items = response.data || response.items || [];
+      const totalItems = response.meta?.totalItems || response.total || 0;
+
+      setData(items);
+      setTotal(totalItems);
     } catch (error) {
       console.error("Failed to fetch groups:", error);
       toast.error("فشل تحميل قائمة المجاميع");
@@ -74,12 +92,14 @@ export default function GroupsPage() {
     try {
       await apiClient.deleteGroup(id);
       toast.success("تم حذف المجموعة بنجاح");
-      fetchGroups();
+      fetchGroups(page);
     } catch (error) {
       console.error("Failed to delete group:", error);
       toast.error("فشل حذف المجموعة");
     }
   };
+
+  const totalPages = Math.ceil(total / limit);
 
   return (
     <div className="space-y-6" dir="rtl">
@@ -103,10 +123,7 @@ export default function GroupsPage() {
           <Input
             placeholder="بحث (الاسم، الكود)..."
             value={searchQuery}
-            onChange={(e) => {
-              setSearchQuery(e.target.value);
-              setPage(1);
-            }}
+            onChange={(e) => setSearchQuery(e.target.value)}
             className="pr-9"
           />
         </div>
@@ -117,17 +134,23 @@ export default function GroupsPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="text-right">اسم المجموعة</TableHead>
+              <TableHead className="text-right">الاسم</TableHead>
               <TableHead className="text-right">الكود</TableHead>
               <TableHead className="text-right">القطاع</TableHead>
               <TableHead className="text-right">المحافظة</TableHead>
               <TableHead className="text-right">القائد</TableHead>
               <TableHead className="text-right">الحالة</TableHead>
-              <TableHead className="w-[70px]"></TableHead>
+              <TableHead className="text-right w-[100px]">الإجراءات</TableHead>
             </TableRow>
           </TableHeader>
-          <TableBody>
-            {loading ? (
+          <TableBody
+            className={
+              loading && data.length > 0
+                ? "opacity-50 pointer-events-none transition-opacity"
+                : ""
+            }
+          >
+            {loading && data.length === 0 ? (
               Array.from({ length: 5 }).map((_, i) => (
                 <TableRow key={i}>
                   <TableCell>
@@ -181,7 +204,7 @@ export default function GroupsPage() {
                   <TableCell>
                     {group.leader ? (
                       <div className="flex items-center gap-1 text-sm">
-                        <Users className="h-3 w-3 text-muted-foreground" />
+                        <User className="h-3 w-3 text-muted-foreground" />
                         {group.leader.full_name}
                       </div>
                     ) : (
@@ -196,29 +219,39 @@ export default function GroupsPage() {
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" className="h-8 w-8 p-0">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem
-                          onClick={() =>
-                            router.push(`/dashboard/groups/${group.id}`)
-                          }
-                        >
-                          تفاصيل
-                        </DropdownMenuItem>
-                        {/* Add Edit later */}
-                        <DropdownMenuItem
-                          className="text-red-600 focus:text-red-600"
-                          onClick={() => handleDelete(group.id)}
-                        >
-                          حذف
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() =>
+                          router.push(`/dashboard/groups/${group.id}`)
+                        }
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() =>
+                          router.push(`/dashboard/groups/${group.id}/edit`)
+                        }
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-destructive hover:text-destructive"
+                        onClick={() => {
+                          // TODO: Implement delete functionality
+                          toast.info("سيتم تفعيل الحذف قريباً");
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))
@@ -237,14 +270,14 @@ export default function GroupsPage() {
         >
           السابق
         </Button>
-        <div className="text-sm">
-          الصفحة {page} من {Math.ceil(total / limit) || 1}
+        <div className="text-sm px-2">
+          صفحة {page} من {totalPages || 1}
         </div>
         <Button
           variant="outline"
           size="sm"
           onClick={() => setPage((p) => p + 1)}
-          disabled={page >= Math.ceil(total / limit) || loading}
+          disabled={page >= totalPages || loading}
         >
           التالي
         </Button>

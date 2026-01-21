@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { apiClient } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
@@ -21,8 +21,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreHorizontal, Plus, Search, Filter } from "lucide-react";
+import { MoreHorizontal, Plus, Search, Filter, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface Sector {
   id: string;
@@ -41,38 +43,59 @@ interface Sector {
 export default function SectorsPage() {
   const router = useRouter();
   const [sectors, setSectors] = useState<Sector[]>([]);
-  const [filteredSectors, setFilteredSectors] = useState<Sector[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Pagination & Filter State
+  const [page, setPage] = useState(1);
+  const [limit] = useState(10);
+  const [total, setTotal] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
+  const isMounted = useRef(false);
 
+  // Debounced search
   useEffect(() => {
-    fetchSectors();
-  }, []);
-
-  useEffect(() => {
-    if (searchQuery.trim() === "") {
-      setFilteredSectors(sectors);
-    } else {
-      const query = searchQuery.toLowerCase();
-      const filtered = sectors.filter(
-        (sector) =>
-          sector.name.toLowerCase().includes(query) ||
-          sector.code.toLowerCase().includes(query) ||
-          sector.province?.name.toLowerCase().includes(query) ||
-          sector.leader?.full_name.toLowerCase().includes(query),
-      );
-      setFilteredSectors(filtered);
+    if (!isMounted.current) {
+      isMounted.current = true;
+      return;
     }
-  }, [searchQuery, sectors]);
 
-  const fetchSectors = async () => {
+    const timer = setTimeout(() => {
+      setPage(1);
+      // We don't call fetchSectors here directly if page is already 1,
+      // because setPage(1) won't trigger the page effect.
+      // So we must force fetch if page is 1, otherwise let page effect handle it.
+      if (page === 1) {
+        fetchSectors(1);
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    fetchSectors(page);
+  }, [page]);
+
+  const fetchSectors = async (pageNum: number) => {
     try {
       setLoading(true);
-      const data = await apiClient.getSectors();
-      setSectors(data);
-      setFilteredSectors(data);
+      // Pass pagination and search params to API
+      const response = await apiClient.getSectors({
+        page: pageNum,
+        limit,
+        search: searchQuery || undefined,
+      });
+
+      const items = response.items || response.data || [];
+      const totalItems =
+        response.meta?.totalItems ||
+        response.total ||
+        items.length; /* Fallback if backend wrapper differs */
+
+      setSectors(items);
+      setTotal(totalItems);
     } catch (error) {
       console.error("Failed to fetch sectors:", error);
+      toast.error("فشل تحميل القواطع");
     } finally {
       setLoading(false);
     }
@@ -82,16 +105,19 @@ export default function SectorsPage() {
     if (confirm("هل أنت متأكد من حذف هذا القاطع؟")) {
       try {
         await apiClient.deleteSector(id);
-        fetchSectors();
+        toast.success("تم حذف القاطع بنجاح");
+        fetchSectors(page);
       } catch (error) {
         console.error("Failed to delete sector:", error);
-        alert("فشل حذف القاطع");
+        toast.error("فشل حذف القاطع");
       }
     }
   };
 
+  const totalPages = Math.ceil(total / limit);
+
   return (
-    <div className="p-6 space-y-6" dir="rtl">
+    <div className=" space-y-6" dir="rtl">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">القطاعات</h1>
@@ -130,21 +156,47 @@ export default function SectorsPage() {
               <TableHead className="w-[70px]"></TableHead>
             </TableRow>
           </TableHeader>
-          <TableBody>
-            {loading ? (
-              <TableRow>
-                <TableCell colSpan={7} className="h-24 text-center">
-                  جاري التحميل...
-                </TableCell>
-              </TableRow>
-            ) : filteredSectors.length === 0 ? (
+          <TableBody
+            className={
+              loading && sectors.length > 0
+                ? "opacity-50 pointer-events-none transition-opacity"
+                : ""
+            }
+          >
+            {loading && sectors.length === 0 ? (
+              Array.from({ length: 5 }).map((_, i) => (
+                <TableRow key={i}>
+                  <TableCell>
+                    <Skeleton className="h-4 w-[100px]" />
+                  </TableCell>
+                  <TableCell>
+                    <Skeleton className="h-4 w-[60px]" />
+                  </TableCell>
+                  <TableCell>
+                    <Skeleton className="h-4 w-[80px]" />
+                  </TableCell>
+                  <TableCell>
+                    <Skeleton className="h-4 w-[100px]" />
+                  </TableCell>
+                  <TableCell>
+                    <Skeleton className="h-4 w-[60px]" />
+                  </TableCell>
+                  <TableCell>
+                    <Skeleton className="h-4 w-[80px]" />
+                  </TableCell>
+                  <TableCell>
+                    <Skeleton className="h-8 w-8 rounded-full" />
+                  </TableCell>
+                </TableRow>
+              ))
+            ) : sectors.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={7} className="h-24 text-center">
                   لا توجد قطاعات
                 </TableCell>
               </TableRow>
             ) : (
-              filteredSectors.map((sector) => (
+              sectors.map((sector) => (
                 <TableRow key={sector.id}>
                   <TableCell className="font-medium">{sector.name}</TableCell>
                   <TableCell>
@@ -182,9 +234,9 @@ export default function SectorsPage() {
                         <DropdownMenuItem
                           onClick={() =>
                             router.push(
-                              `/dashboard/sectors/${sector.id}?edit=true`,
+                              `/dashboard/sectors/${sector.id}/edit`, // Fixed routing
                             )
-                          } // Assuming edit inside details or we can add separate edit page
+                          }
                         >
                           تعديل
                         </DropdownMenuItem>
@@ -203,6 +255,29 @@ export default function SectorsPage() {
             )}
           </TableBody>
         </Table>
+      </div>
+
+      {/* Pagination Controls */}
+      <div className="flex items-center justify-end space-x-2 space-x-reverse mt-4">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setPage((p) => Math.max(1, p - 1))}
+          disabled={page === 1 || loading}
+        >
+          السابق
+        </Button>
+        <div className="text-sm px-2">
+          صفحة {page} من {totalPages || 1}
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setPage((p) => p + 1)}
+          disabled={page >= totalPages || loading}
+        >
+          التالي
+        </Button>
       </div>
     </div>
   );

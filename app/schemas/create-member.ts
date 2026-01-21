@@ -34,7 +34,6 @@ export const createMemberSchema = z.object({
     .email("البريد الإلكتروني غير صحيح")
     .min(1, "البريد الإلكتروني مطلوب"),
   password: z.string().min(6, "كلمة المرور يجب أن تكون 6 أحرف على الأقل"),
-  role_id: z.string().uuid("معرف الدور غير صحيح"),
 });
 
 export type CreateMemberFormData = z.infer<typeof createMemberSchema>;
